@@ -1,6 +1,5 @@
 #include <cheat/pipe.h>
-#include <ptoria/scriptservice.h>
-#include <ptoria/scriptinstance.h>
+#include <runtime/executorbridge.h>
 #include <thread>
 #include <atomic>
 #include <string>
@@ -155,11 +154,18 @@ static void PipeServerThreadFunc()
             
             spdlog::info("Received script via pipe ({} bytes)", script.length());
             
-            // Execute the script
+            // Execute or forward the script through the active runtime bridge.
             try
             {
-                ScriptService::RunScript<ScriptInstance>(script);
-                spdlog::info("Script executed successfully");
+                std::string error;
+                if (ExecutorBridge::ExecuteScript(script, &error))
+                {
+                    spdlog::info("Script accepted by {} runtime", Runtime::ToString(ExecutorBridge::GetEngine()));
+                }
+                else
+                {
+                    spdlog::error("Script execution error: {}", error);
+                }
             }
             catch (const std::exception& e)
             {

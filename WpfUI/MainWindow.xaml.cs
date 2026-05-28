@@ -31,7 +31,6 @@ namespace PolyHack
     public partial class MainWindow : Window
     {
         private string monacoPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "monaco");
-        private bool isDLL = true; // old placeholder for melon loader executor
 
         public MainWindow()
         {
@@ -140,37 +139,40 @@ namespace PolyHack
 
         private void Inject_Click(object sender, RoutedEventArgs e)
         {
-            if (isDLL)
+            string? dllPath = ResolveExecutorDllPath();
+            if (dllPath == null)
             {
-                string dllPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wowiezz.dll");
-                if (DllInjector.Inject("Polytoria Client", dllPath))
-                {
-                    MessageBox.Show("Inject Success!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-                    MainTabControl.SelectedItem = AboutTab;
-                }
-                else
-                {
-                    MessageBox.Show("Failed to inject wowiezz.dll into Polytoria Client!", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
+                MessageBox.Show("Could not find wowiezz.dll. Build the wowiezz target first or place wowiezz.dll beside PolyHack.exe.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
-            Process[] processes = Process.GetProcessesByName("Polytoria");
-            if (processes.Length == 0)
+            DllInjectionResult result = DllInjector.InjectDetailed("Polytoria Client", dllPath);
+            if (result.Success)
             {
-                // Try alternate name if Polytoria is not found
-                processes = Process.GetProcessesByName("Polytoria Client");
-            }
-
-            if (processes.Length > 0)
-            {
-                MessageBox.Show("Inject Success!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(result.Message, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 MainTabControl.SelectedItem = AboutTab;
             }
             else
             {
-                MessageBox.Show("Polytoria.exe not found!", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(result.Message, "Injection failed", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private static string? ResolveExecutorDllPath()
+        {
+            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            string currentDirectory = Directory.GetCurrentDirectory();
+
+            string[] candidates =
+            {
+                System.IO.Path.Combine(baseDirectory, "wowiezz.dll"),
+                System.IO.Path.Combine(currentDirectory, "wowiezz.dll"),
+                System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDirectory, "..", "..", "..", "..", ".download", "wowiezz.dll")),
+                System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDirectory, "..", "..", "..", "..", "build", "windows", "x64", "release", "wowiezz.dll")),
+                System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDirectory, "..", "..", "..", "..", "build", "windows", "x64", "debug", "wowiezz.dll"))
+            };
+
+            return candidates.FirstOrDefault(File.Exists);
         }
 
         private async void Execute_Click(object sender, RoutedEventArgs e)

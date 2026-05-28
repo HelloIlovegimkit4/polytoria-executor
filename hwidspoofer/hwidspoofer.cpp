@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <core/core.h>
 #include <filesystem>
+#include <system_error>
 #include <hwidspoofer/multiclient.h>
 
 std::string scramble(const std::string &input)
@@ -93,11 +94,24 @@ UnityString*GetDeviceUniqueID_Hook()
         spdlog::info("[SkipSpoofer] Device Unique ID hook triggered, initializing Unity and cleanup...");
         Unity::Init();
         Unity::ThreadAttach();
-        // good time to load dll if it exists
-        if (std::filesystem::exists("wowiezz.dll"))
+        // Good time to load the executor DLL if it exists beside the proxy DLL.
+        wchar_t modulePath[MAX_PATH]{};
+        HMODULE versionModule = nullptr;
+        if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               reinterpret_cast<LPCWSTR>(&GetDeviceUniqueID_Hook),
+                               &versionModule) &&
+            GetModuleFileNameW(versionModule, modulePath, MAX_PATH) != 0)
         {
-            spdlog::info("[SkipSpoofer] Found wowiezz.dll, loading...");
-            LoadLibraryA("wowiezz.dll");
+            std::filesystem::path executorDllPath = std::filesystem::path(modulePath).parent_path() / L"wowiezz.dll";
+            std::error_code existsError;
+            if (std::filesystem::exists(executorDllPath, existsError))
+            {
+                spdlog::info("[SkipSpoofer] Found {}, loading...", executorDllPath.string());
+                if (!LoadLibraryW(executorDllPath.wstring().c_str()))
+                {
+                    spdlog::error("[SkipSpoofer] Failed to load {}: {}", executorDllPath.string(), GetLastError());
+                }
+            }
         }
 
         // This will crash the program because it's running too early
