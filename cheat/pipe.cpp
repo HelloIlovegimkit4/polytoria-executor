@@ -1,6 +1,5 @@
 #include <cheat/pipe.h>
-#include <ptoria/scriptservice.h>
-#include <ptoria/scriptinstance.h>
+#include <runtime/executorbridge.h>
 #include <thread>
 #include <atomic>
 #include <string>
@@ -155,15 +154,33 @@ static void PipeServerThreadFunc()
             
             spdlog::info("Received script via pipe ({} bytes)", script.length());
             
-            // Execute the script
+            // Execute or forward the script through the active runtime bridge.
+            std::string pipeResponse;
             try
             {
-                ScriptService::RunScript<ScriptInstance>(script);
-                spdlog::info("Script executed successfully");
+                std::string error;
+                if (ExecutorBridge::ExecuteScript(script, &error))
+                {
+                    pipeResponse = std::string("OK: Script executed by ") + Runtime::ToString(ExecutorBridge::GetEngine()) + " runtime\n";
+                    spdlog::info("Script executed by {} runtime", Runtime::ToString(ExecutorBridge::GetEngine()));
+                }
+                else
+                {
+                    pipeResponse = "ERR: " + error + "\n";
+                    spdlog::error("Script execution error: {}", error);
+                }
             }
             catch (const std::exception& e)
             {
+                pipeResponse = std::string("ERR: ") + e.what() + "\n";
                 spdlog::error("Script execution error: {}", e.what());
+            }
+
+            DWORD bytesWritten = 0;
+            if (!pipeResponse.empty() &&
+                !WriteFile(hPipe, pipeResponse.data(), static_cast<DWORD>(pipeResponse.size()), &bytesWritten, nullptr))
+            {
+                spdlog::warn("Failed to write pipe execution response: {}", GetLastError());
             }
         }
         

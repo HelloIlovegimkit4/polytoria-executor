@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Windows;
 
@@ -37,35 +38,41 @@ namespace PolyHack
 
         public static void LuaPipe(string script)
         {
-            if (NamedPipeExist(luapipename))
-            {
-                new Thread(() =>
-                {
-                    try
-                    {
-                        using (NamedPipeClientStream namedPipeClientStream = new NamedPipeClientStream(".", luapipename, PipeDirection.Out))
-                        {
-                            namedPipeClientStream.Connect(2000);
-                            using (StreamWriter streamWriter = new StreamWriter(namedPipeClientStream, System.Text.Encoding.Default, 999999))
-                            {
-                                streamWriter.Write(script);
-                                streamWriter.Flush();
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Application.Current.Dispatcher.Invoke(() => 
-                        {
-                            MessageBox.Show(ex.Message, "Pipe Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                        });
-                    }
-                }).Start();
-            }
-            else
+            if (!NamedPipeExist(luapipename))
             {
                 MessageBox.Show("Please inject before executing!", "Error", MessageBoxButton.OK, MessageBoxImage.Exclamation);
+                return;
             }
+
+            new Thread(() =>
+            {
+                try
+                {
+                    using NamedPipeClientStream namedPipeClientStream = new NamedPipeClientStream(".", luapipename, PipeDirection.InOut);
+                    namedPipeClientStream.Connect(2000);
+
+                    using StreamWriter streamWriter = new StreamWriter(namedPipeClientStream, Encoding.UTF8, 999999, leaveOpen: true);
+                    streamWriter.Write(script);
+                    streamWriter.Flush();
+
+                    using StreamReader streamReader = new StreamReader(namedPipeClientStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 4096, leaveOpen: true);
+                    string response = streamReader.ReadLine() ?? string.Empty;
+                    if (response.StartsWith("ERR: ", StringComparison.Ordinal))
+                    {
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            MessageBox.Show(response.Substring(5), "Execution Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        MessageBox.Show(ex.Message, "Pipe Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    });
+                }
+            }).Start();
         }
     }
 }
