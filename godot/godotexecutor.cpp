@@ -101,9 +101,13 @@ namespace GodotExecutor
         stream.write(script.data(), static_cast<std::streamsize>(script.size()));
         stream.close();
 
-        spdlog::warn("[GodotExecutor] Script accepted but not executed; wrote {} bytes to {}. Native Unity hooks cannot drive Godot/Luau.",
-                     script.size(),
-                     scriptPath.string());
-        return true;
+        const std::string message = "Godot script execution is not available yet; wrote script to " + scriptPath.string() +
+                                    ". A managed Godot/Luau bridge is required instead of the legacy Unity hook path.";
+        spdlog::error("[GodotExecutor] {}", message);
+        if (error)
+        {
+            *error = message;
+        }
+        return false;
     }
 }
